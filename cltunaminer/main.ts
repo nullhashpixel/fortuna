@@ -336,6 +336,8 @@ const mine = new Command()
         console.log(`TX HASH: ${signed.toHash()}`);
         console.log("Waiting for confirmation...");
 
+        n_hashes += 1;
+
         // // await lucid.awaitTx(signed.toHash());
         await delay(2000);
       } catch (e) {
