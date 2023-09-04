@@ -85,7 +85,15 @@ const mine = new Command()
     })
 
     // try to connect to all cores and ignore non responding cores
-    const miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
+
+    var miner_connections = [];
+    while (miner_connections.length<1) {
+        miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
+        if (miner_connections.length < 1) {
+            console.log("no miner cores found, retrying...");
+            await delay(5000);
+        }
+    }
 
     var time_start = Date.now();
     var n_hashes = 0;
