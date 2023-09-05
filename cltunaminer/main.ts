@@ -326,7 +326,6 @@ const mine = new Command()
 
         try {
             const url = "http://localhost:8090/api/submit/tx"
-            console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
             const req = new Request(url, {
                   method: "POST",
                   body: signed.txSigned.to_bytes(),
@@ -335,10 +334,20 @@ const mine = new Command()
                   }
                 });
             var resp = await fetch(req);
-            console.log(resp);        
+            console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
+            console.log("CARDANO-SUBMIT-API RESPONSE:", resp);
         } catch (err) {
-            console.log("WARNING: submission with the submit-api failed, using default provider as backup.");
-            await signed.submit();
+            console.log("info: submission with the submit-api failed, using default provider as backup. This will most likely be fine. If you're running a local node, it is recommended to have cardano-submit-api installed for redundancy of transaction submission.");
+
+            try {
+                await signed.submit();
+            } catch (err) {
+                console.log("error: first tx submission attempt failed:");
+                console.log(err);
+                console.log("trying again...");
+                await delay(2000);
+                await signed.submit();
+            }
         }
 
         console.log(`TX HASH: ${signed.toHash()}`);
@@ -347,7 +356,7 @@ const mine = new Command()
         n_hashes += 1;
 
         // // await lucid.awaitTx(signed.toHash());
-        await delay(2000);
+        await delay(3000);
       } catch (e) {
         console.log(e);
       }
