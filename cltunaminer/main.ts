@@ -55,8 +55,9 @@ const mine = new Command()
   .env("KUPO_URL=<value:string>", "Kupo URL", { required: true })
   .env("OGMIOS_URL=<value:string>", "Ogmios URL", { required: true })
   .env("SUBMIT_API_URL=<value:string>", "Submit API Url", { required: false })
+  .env("EXTRA=<value:string>", "Data to include in the extra field", { required: false })
   .option("-p, --preview", "Use testnet")
-  .action(async ({ preview, submitApiUrl, ogmiosUrl, kupoUrl }) => {
+  .action(async ({ preview, extra, submitApiUrl, ogmiosUrl, kupoUrl }) => {
     submitApiUrl = submitApiUrl || "http://localhost:8090/api/submit/tx";
 
     //--------------------------------------------------------------------------------------------
@@ -291,7 +292,7 @@ const mine = new Command()
         difficulty_number,
         epoch_time,
         BigInt(90000 + realTimeNow),
-        fromText("AlL HaIl tUnA"),
+        extra ? fromText(extra) : 0n,
         interlink,
       ]);
 
