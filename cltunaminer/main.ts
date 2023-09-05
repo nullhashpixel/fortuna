@@ -54,8 +54,10 @@ const mine = new Command()
   .description("Start the miner")
   .env("KUPO_URL=<value:string>", "Kupo URL", { required: true })
   .env("OGMIOS_URL=<value:string>", "Ogmios URL", { required: true })
+  .env("SUBMIT_API_URL=<value:string>", "Submit API Url", { required: false })
   .option("-p, --preview", "Use testnet")
-  .action(async ({ preview, ogmiosUrl, kupoUrl }) => {
+  .action(async ({ preview, submitApiUrl, ogmiosUrl, kupoUrl }) => {
+    submitApiUrl = submitApiUrl || "http://localhost:8090/api/submit/tx";
 
     //--------------------------------------------------------------------------------------------
     // put your miner cores here, default is: {port: 2023} 
@@ -325,8 +327,7 @@ const mine = new Command()
         const signed = await txMine.sign().complete();
 
         try {
-            const url = "http://localhost:8090/api/submit/tx"
-            const req = new Request(url, {
+            const req = new Request(submitApiUrl, {
                   method: "POST",
                   body: signed.txSigned.to_bytes(),
                   headers: {
