@@ -87,7 +87,15 @@ const mine = new Command()
     })
 
     // try to connect to all cores and ignore non responding cores
-    const miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
+
+    var miner_connections = [];
+    while (miner_connections.length<1) {
+        miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
+        if (miner_connections.length < 1) {
+            console.log("no miner cores found, retrying...");
+            await delay(5000);
+        }
+    }
 
     var time_start = Date.now();
     var n_hashes = 0;
@@ -319,7 +327,6 @@ const mine = new Command()
         const signed = await txMine.sign().complete();
 
         try {
-            console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
             const req = new Request(submitApiUrl, {
                   method: "POST",
                   body: signed.txSigned.to_bytes(),
@@ -328,10 +335,20 @@ const mine = new Command()
                   }
                 });
             var resp = await fetch(req);
-            console.log(resp);        
+            console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
+            console.log("CARDANO-SUBMIT-API RESPONSE:", resp);
         } catch (err) {
-            console.log("WARNING: submission with the submit-api failed, using default provider as backup.");
-            await signed.submit();
+            console.log("info: submission with the submit-api failed, using default provider as backup. This will most likely be fine. If you're running a local node, it is recommended to have cardano-submit-api installed for redundancy of transaction submission.");
+
+            try {
+                await signed.submit();
+            } catch (err) {
+                console.log("error: first tx submission attempt failed:");
+                console.log(err);
+                console.log("trying again...");
+                await delay(2000);
+                await signed.submit();
+            }
         }
 
         console.log(`TX HASH: ${signed.toHash()}`);
@@ -340,7 +357,7 @@ const mine = new Command()
         n_hashes += 1;
 
         // // await lucid.awaitTx(signed.toHash());
-        await delay(2000);
+        await delay(3000);
       } catch (e) {
         console.log(e);
       }
