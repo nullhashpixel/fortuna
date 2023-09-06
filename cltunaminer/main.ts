@@ -57,7 +57,7 @@ const mine = new Command()
   .env("SUBMIT_API_URL=<value:string>", "Submit API Url", { required: false })
   .env("EXTRA=<value:string>", "Data to include in the extra field", { required: false })
   .option("-p, --preview", "Use testnet")
-  .action(async ({ preview, submitApiUrl, ogmiosUrl, kupoUrl }) => {
+  .action(async ({ preview, extra, submitApiUrl, ogmiosUrl, kupoUrl }) => {
     //--------------------------------------------------------------------------------------------
     // put your miner core config in the .env file
     // syntax: hostname:port or only port if on the same machine.
