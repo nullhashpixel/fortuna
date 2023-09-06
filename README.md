@@ -10,6 +10,31 @@
 <hr/>
 </div>
 
+## GPU mining specific
+
+- it needs a separate OpenCL miner core from here: 
+https://github.com/nullhashpixel/cltunaminer
+where you also find the general GPU mining instructions.
+
+- setup your miner cores in `.env`, example (local setup):
+````
+KUPO_URL="http://127.0.0.1:1442"
+OGMIOS_URL="ws://localhost:1337"
+MINER_CORE_URLS="127.0.0.1:2023"
+SUBMIT_API_URL="http://localhost:8090/api/submit/tx"
+````
+- create your wallet, as shown below in the original instructions
+  
+- run the mining script
+  
+```sh
+deno task cltunaminer mine
+```
+
+- or run with automatic restart, use `./run.sh` (Linux)
+
+# below are the original instructions
+
 ## Mining $TUNA
 
 > The current miner is naive and a better implementation is coming soon.
