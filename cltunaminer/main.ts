@@ -57,15 +57,35 @@ const mine = new Command()
   .env("SUBMIT_API_URL=<value:string>", "Submit API Url", { required: false })
   .option("-p, --preview", "Use testnet")
   .action(async ({ preview, submitApiUrl, ogmiosUrl, kupoUrl }) => {
-    submitApiUrl = submitApiUrl || "http://localhost:8090/api/submit/tx";
+    //submitApiUrl = submitApiUrl || "http://localhost:8090/api/submit/tx";
 
     //--------------------------------------------------------------------------------------------
-    // put your miner cores here, default is: {port: 2023} 
+    // put your miner core config in the .env file
+    // syntax: hostname:port or only port if on the same machine.
+    // examples:
+    // 
+    //  - default: MINER_CORE_URLS=":2023"            single miner on localhost port 2023
+    //  - multiple miners on remote machines:  MINER_CORE_URLS="123.456.789.123:2023,234.567.890.123:4057,234.567.890.123:4058"
     //--------------------------------------------------------------------------------------------
-    const miners = [
-        {port: 2023},
+    var miners = [
+        {port: 2023}, // don't change this, kept for backward compatibility.
     ]
-    //--------------------------------------------------------------------------------------------
+    var minersEnv = Deno.env.get("MINER_CORE_URLS");
+    if (minersEnv != undefined) {
+        var parts = minersEnv.split(",");
+        miners = [];
+        parts.forEach( (x) => {
+            var subparts = x.split(':');
+            if (subparts.length < 2) {
+                miners.push({port: parseInt(subparts[0])});
+            } else if (subparts.length == 2) {
+                miners.push({hostname: (subparts[0].trim().length > 0 ? subparts[0] : '127.0.0.1') , port: parseInt(subparts[1])});
+            } else {
+                console.log(`\x1b[31merror: invalid miner core: ${x}`);
+            }
+        });
+    }
+
 
     const genesisFile = Deno.readTextFileSync(
         `genesis/${preview ? "preview" : "mainnet"}.json`,
@@ -81,7 +101,15 @@ const mine = new Command()
 
     lucid.selectWalletFromSeed(Deno.readTextFileSync("seed.txt"));
 
-    console.log("connecting to:")
+    if (submitApiUrl == undefined) {
+        console.log("------------------------------------------------------------------------------------------");
+        console.log("info: \x1b[32mcardano-submit-api\x1b[0m is not configured and \x1b[31mwill not be used\x1b[0m. To enable it, add SUBMIT_API_URL=<url> to your .env file. Default value is: \x1b[33mhttp://localhost:8090/api/submit/tx\x1b[0m" );
+        console.log("Using cardano-submit-api increases the chances for successful tx submission. It will be tried first and in case of failure, kupmios is used.");
+        console.log("------------------------------------------------------------------------------------------");
+    } else {
+        console.log("submit-api:", submitApiUrl);
+    }
+    console.log("connecting to:");
     miners.forEach( (x) => {
         console.log(`- ${JSON.stringify(x)}`)
     })
@@ -90,11 +118,15 @@ const mine = new Command()
 
     var miner_connections = [];
     while (miner_connections.length<1) {
-        miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
+        miner_connections = (await Promise.allSettled(miners.map(async (x) => Deno.connect(x)))).map( (x) => {console.log(`${x.status == 'fulfilled' ? x.value.remoteAddr['hostname'] + ':' + x.value.remoteAddr['port'] : JSON.stringify(x)} => ${x.status == 'fulfilled' ? '\x1b[32mOK\x1b[0m' : '\x1b[31mERROR\x1b[0m'}`); return x}).filter( (x)=> x.status == "fulfilled" ).map( (x) => x.value );
         if (miner_connections.length < 1) {
             console.log("no miner cores found, retrying...");
             await delay(5000);
         }
+    }
+
+    if (miner_connections.length < miners.length) {
+        console.log("warning: some miner cores could not be connected, continuing with the working ones.");
     }
 
     var time_start = Date.now();
@@ -181,6 +213,16 @@ const mine = new Command()
             ]);
             console.log("STATE = ", Data.to(targetState));
             console.log(`=> DIFFICULTY = \x1b[34m${(state.fields[2] as bigint)} ${(state.fields[3] as bigint)}\x1b[0m BLOCK = ${state.fields[0] as bigint} EPOCH = ${state.fields[4] as bigint}`);
+
+            try{
+            var datum_timestamp = Number(state.fields[5]);
+            var now_timestamp = new Date().getTime();
+            console.log(`=> DATUM TIMESTAMP: ${datum_timestamp} (${new Date(datum_timestamp).toISOString()})`);
+            if (now_timestamp - datum_timestamp > 24*3600*1000) {
+                console.log("warning: timestamp from utxo datum seems to be in the past, check sync status of kupo and your time settings.");
+            }
+            } catch (err) {
+            }
           }
 
         targetHash = sha256(sha256(fromHex(Data.to(targetState))));
@@ -326,29 +368,49 @@ const mine = new Command()
 
         const signed = await txMine.sign().complete();
 
-        try {
-            const req = new Request(submitApiUrl, {
-                  method: "POST",
-                  body: signed.txSigned.to_bytes(),
-                  headers: {
-                    'content-type': 'application/cbor',
-                  }
-                });
-            var resp = await fetch(req);
-            console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
-            console.log("CARDANO-SUBMIT-API RESPONSE:", resp);
-        } catch (err) {
-            console.log("info: submission with the submit-api failed, using default provider as backup. This will most likely be fine. If you're running a local node, it is recommended to have cardano-submit-api installed for redundancy of transaction submission.");
-
+        if (submitApiUrl != undefined) {
             try {
-                await signed.submit();
+                const req = new Request(submitApiUrl, {
+                      method: "POST",
+                      body: signed.txSigned.to_bytes(),
+                      headers: {
+                        'content-type': 'application/cbor',
+                      }
+                    });
+                var resp = await fetch(req);
+                console.log("SIGNED:", new TextDecoder().decode(encode(signed.txSigned.to_bytes())));
+                console.log("CARDANO-SUBMIT-API RESPONSE:", resp);
             } catch (err) {
-                console.log("error: first tx submission attempt failed:");
-                console.log(err);
-                console.log("trying again...");
-                await delay(2000);
-                await signed.submit();
+                console.log("info: submission with the submit-api failed, using default provider as backup. This will most likely be fine. If you're running a local node, it is recommended to have cardano-submit-api installed for redundancy of transaction submission.");
+
+                try {
+                    await signed.submit();
+                } catch (err) {
+                    console.log("error: second tx submission attempt (kupmios) failed:");
+                    console.log(err);
+                    console.log("trying again...");
+                    await delay(2000);
+                    await signed.submit();
+                }
             }
+        } else {
+                try {
+                    await signed.submit();
+                } catch (err) {
+                    console.log("error: first tx submission attempt failed:");
+                    console.log(err);
+                    console.log("trying again...");
+
+                    try {
+                        await delay(2000);
+                        await signed.submit();
+                    } catch (err) {
+                        console.log("error: second tx submission attempt failed:");
+                        console.log(err);
+                        console.log("final attempt...");
+                        await signed.submit();
+                    }
+                }
         }
 
         console.log(`TX HASH: ${signed.toHash()}`);

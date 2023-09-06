@@ -10,6 +10,12 @@
 <hr/>
 </div>
 
+## GPU miner specific
+
+- to run with automatic restart, use `./run.sh` (Linux)
+- setup your miner cores in `.env`, default is a single local miner core listening on 127.0.0.1:2023
+
+
 ## Mining $TUNA
 
 > The current miner is naive and a better implementation is coming soon.
